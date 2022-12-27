@@ -5,6 +5,7 @@ from enum import Enum
 import datetime as dt
 import win32clipboard
 import multiprocessing
+import datetime
 
 png_dir = 'D:/Projects/chess.com/analyze every game/Bot/button png/'
 
@@ -98,11 +99,23 @@ class Winner(Enum):
 
 
 class Reason(Enum):
-    CHECKMATE = 0
-    STALEMATE = 1
-    REPETITION = 2
-    TIME = 3
-    AGREEMENT = 4
+    pass
+
+
+class DrawReason(Reason):
+    STALEMATE = 0
+    REPETITION = 1
+    AGREEMENT = 2
+    INSUFFICIENT_MATERIAL = 3
+    FIFTY_MOVE_RULE = 4
+    TIMEOUT = 5
+
+
+class VictoryReason(Reason):
+    CHECKMATE = 1
+    RESIGNATION = 2
+    ABANDONEMENT = 3
+    TIMEOUT = 4
 
 
 @dataclass
@@ -117,9 +130,9 @@ class Move:
 
 @dataclass
 class Game:
-    names = tuple[str, str]
-    elos = tuple[int, int]
-    accuracy = tuple[float, float]
+    names: tuple[str, str]
+    elos: tuple[int, int]
+    accuracy: tuple[float, float]
     time_control: tuple[int, int]
     start_datetime: dt.datetime
     end_datetime: dt.datetime
@@ -246,6 +259,31 @@ def parse_review():
     # click the x
     pyautogui.click(x=1233, y=280)
     pgn_dict = pgn_to_dict(pgn)
+
+    white_accuracy = pyautogui.locateCenterOnScreen(
+        png_dir+'white_accuracy.png', confidence=0.6, region=(1215, 130, 500, 830))
+    pyautogui.moveTo(white_accuracy)
+    pyautogui.moveRel(0, -10)
+    pyautogui.doubleClick()
+    pyautogui.hotkey('ctrl', 'c')
+    time.sleep(0.01)
+    win32clipboard.OpenClipboard()
+    white_accuracy = float(win32clipboard.GetClipboardData())
+    win32clipboard.CloseClipboard()
+
+    black_accuracy = pyautogui.locateCenterOnScreen(
+        png_dir+'black_accuracy.png', confidence=0.6, region=(1215, 130, 500, 830))
+    pyautogui.moveTo(black_accuracy)
+    pyautogui.moveRel(0, -10)
+    pyautogui.doubleClick()
+    pyautogui.hotkey('ctrl', 'c')
+    time.sleep(0.01)
+    win32clipboard.OpenClipboard()
+    black_accuracy = float(win32clipboard.GetClipboardData())
+    win32clipboard.CloseClipboard()
+
+    accuracy = (white_accuracy, black_accuracy)
+
     marks = []
     # click next move button
     pyautogui.click(x=1329, y=1000)
@@ -276,30 +314,82 @@ def parse_review():
                           is_mate))
 
     white_rating = pyautogui.locateCenterOnScreen(
-        png_dir+'white_rating.png', 0.6, region=(1215, 130, 500, 830))
+        png_dir+'white_rating.png', confidence=0.6, region=(1215, 130, 500, 830))
     pyautogui.moveTo(white_rating)
     pyautogui.moveRel(0, -10)
     pyautogui.doubleClick()
     pyautogui.hotkey('ctrl', 'c')
     time.sleep(0.01)
     win32clipboard.OpenClipboard()
-    white_rating = win32clipboard.GetClipboardData()
+    white_rating = int(win32clipboard.GetClipboardData())
     win32clipboard.CloseClipboard()
 
-    white_rating = pyautogui.locateCenterOnScreen(
-        png_dir+'black_rating.png', 0.6, region=(1215, 130, 500, 830))
-    pyautogui.moveTo(white_rating)
+    black_rating = pyautogui.locateCenterOnScreen(
+        png_dir+'black_rating.png', confidence=0.6, region=(1215, 130, 500, 830))
+    pyautogui.moveTo(black_rating)
     pyautogui.moveRel(0, -10)
     pyautogui.doubleClick()
     pyautogui.hotkey('ctrl', 'c')
     time.sleep(0.01)
     win32clipboard.OpenClipboard()
-    black_rating = win32clipboard.GetClipboardData()
+    black_rating = int(win32clipboard.GetClipboardData())
     win32clipboard.CloseClipboard()
 
-    return pgn, pgn_dict, marks
+    skill_level = (white_rating, black_rating)
+    names = (pgn_dict["White"], pgn_dict["Black"])
+    elos = (pgn_dict["White Elo"], pgn_dict["Black Elo"])
+    time_control = pgn_dict["Time control"]
+    ECO = pgn_dict["ECO"]
+    url = pgn_dict["Link"]
+    if pgn_dict["Termination"].find(names[0]) != -1:
+        winner = Winner.WHITE
+    elif pgn_dict["Termination"].find(names[1]) != -1:
+        winner = Winner.BLACK
+    else:
+        winner = Winner.DRAW
+    if winner.name != 'DRAW':
+        if pgn_dict["Termination"].find('time') != -1:
+            reason = VictoryReason.TIMEOUT
+        elif pgn_dict["Termination"].find('checkmate') != -1:
+            reason = VictoryReason.CHECKMATE
+        elif pgn_dict["Termination"].find('resignation') != -1:
+            reason = VictoryReason.RESIGNATION
+        else:
+            reason = VictoryReason.ABANDONEMENT
+    else:
+        if pgn_dict["Termination"].find('agreement') != -1:
+            reason = DrawReason.AGREEMENT
+        elif pgn_dict["Termination"].find('repetition') != -1:
+            reason = DrawReason.REPETITION
+        elif pgn_dict["Termination"].find('stalemate') != -1:
+            reason = DrawReason.STALEMATE
+        elif pgn_dict["Termination"].find('timeout') != -1:
+            reason = DrawReason.TIMEOUT
+        elif pgn_dict["Termination"].find('insufficient material') != -1:
+            reason = DrawReason.INSUFFICIENT_MATERIAL
+        else:
+            reason = DrawReason.FIFTY_MOVE_RULE
+    result = (winner, reason)
+    start_datetime = datetime.datetime.strptime(pgn_dict['Start date']+" "+pgn_dict['Start time'],
+                                                '%Y.%m.%d %H:%M:%S')
+    end_datetime = datetime.datetime.strptime(pgn_dict['End date']+" "+pgn_dict['End time'],
+                                              '%Y.%m.%d %H:%M:%S')
+    game = Game(names,
+                elos,
+                accuracy,
+                time_control,
+                start_datetime,
+                end_datetime,
+                url,
+                moves,
+                result,
+                skill_level,
+                ECO,
+                pgn)
+
+    return game
 
 
 if __name__ == "__main__":
     time.sleep(5)
-    pgn, pgn_dict, marks = parse_review()
+    game = parse_review()
