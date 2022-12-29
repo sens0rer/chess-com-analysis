@@ -4,20 +4,30 @@ from dataclasses import dataclass
 from enum import Enum
 import datetime as dt
 import win32clipboard
-import multiprocessing
+import threading
 import datetime
+import pickle
 
-png_dir = 'D:/Projects/chess.com/analyze every game/Bot/button png/'
+png_dir = 'D:/Projects/chess.com/analyze every game/button png/'
+game_dir = 'D:/Projects/chess.com/analyze every game/saved games/'
 
 
 def click_button(filename, sleep_seconds=0.01, x=0, y=0, width=1920, height=1080):
-    button = pyautogui.locateOnScreen(
-        png_dir+filename, confidence=0.95, region=(x, y, width, height))
+    button = None
+    n = 0
+    while button is None:
+        button = pyautogui.locateOnScreen(
+            png_dir+filename, confidence=0.95, region=(x, y, width, height))
+        n += 1
+        if n == 4:
+            break
+
     if button is None:
-        return
+        return False
     button = pyautogui.center(button)
     pyautogui.click(button)
     time.sleep(sleep_seconds)
+    return True
 
 
 def is_on_screen(filename, confidence=0.99, x=0, y=0, width=1920, height=1080):
@@ -28,32 +38,24 @@ def is_on_screen(filename, confidence=0.99, x=0, y=0, width=1920, height=1080):
     return True
 
 
-def _is_on_screen(filename, process, return_dict, run, confidence=0.99, x=0, y=0, width=1920, height=1080):
+def _is_on_screen(filename, return_list, confidence=0.99, x=0, y=0, width=1920, height=1080):
     button = pyautogui.locateOnScreen(
         png_dir+filename, confidence, region=(x, y, width, height))
     if button is not None:
-        return_dict[process] = filename
-        run.clear()
+        return_list.append(filename)
 
 
 def is_on_screen_multiprocessed(filenames, confidence=0.99, x=0, y=0, width=1920, height=1080):
-    processes = []
-    manager = multiprocessing.Manager()
-    return_values = manager.dict()
-    run = manager.Event()
-    run.set()
+    return_value = []
     for i, filename in enumerate(filenames):
-        process = multiprocessing.Process(
-            target=_is_on_screen, args=(filename, i, return_values, run, confidence, x, y, width, height))
-        processes.append(process)
-        process.start()
+        thread = threading.Thread(
+            target=_is_on_screen, args=(filename, return_value, confidence, x, y, width, height), daemon=True)
+        thread.start()
 
-    while run.is_set():
+    while not return_value:
         pass
-    for process in processes:
-        process.terminate()
 
-    return list(return_values.values())[0]
+    return return_value[0]
 
 
 def refresh_page():
@@ -142,6 +144,13 @@ class Game:
     skill_level: tuple[int, int]
     ECO: str
     PGN: str
+
+    def save(self):
+        filename = self.start_datetime.strftime('%Y-%m-%d %Hh%Mm%Ss')
+        with open(game_dir+filename, 'wb') as file:
+            pickle.dump(self, file)
+            print(
+                f'Game between {self.names[0]}({self.elos[1]}) and {self.names[1]}({self.elos[1]}) saved with filename "{filename}"')
 
 
 def pgn_to_dict(pgn):
@@ -243,25 +252,24 @@ def time_to_seconds(time_list):
 
 
 def parse_review():
-    # Get PGN
     click_button('share.png')
     click_button('anotation.png')
     click_button('timestamps.png')
     click_button('comments_true.png')
     click_button('keymoments_true.png')
-    # click pgn field
-    pyautogui.click(x=1171, y=570)
+    pyautogui.moveTo(x=1172, y=551)
+    pyautogui.moveRel(0, 30)
+    pyautogui.click()
     pyautogui.hotkey('ctrl', 'c')
     time.sleep(0.01)
     win32clipboard.OpenClipboard()
     pgn = win32clipboard.GetClipboardData()
     win32clipboard.CloseClipboard()
-    # click the x
-    pyautogui.click(x=1233, y=280)
+    click_button('exitpgn.png')
     pgn_dict = pgn_to_dict(pgn)
 
     white_accuracy = pyautogui.locateCenterOnScreen(
-        png_dir+'white_accuracy.png', confidence=0.6, region=(1215, 130, 500, 830))
+        png_dir+'white_accuracy.png', confidence=0.9, region=(1215, 130, 500, 830))
     pyautogui.moveTo(white_accuracy)
     pyautogui.moveRel(0, -10)
     pyautogui.doubleClick()
@@ -272,7 +280,7 @@ def parse_review():
     win32clipboard.CloseClipboard()
 
     black_accuracy = pyautogui.locateCenterOnScreen(
-        png_dir+'black_accuracy.png', confidence=0.6, region=(1215, 130, 500, 830))
+        png_dir+'black_accuracy.png', confidence=0.9, region=(1215, 130, 500, 830))
     pyautogui.moveTo(black_accuracy)
     pyautogui.moveRel(0, -10)
     pyautogui.doubleClick()
@@ -285,7 +293,6 @@ def parse_review():
     accuracy = (white_accuracy, black_accuracy)
 
     marks = []
-    # click next move button
     pyautogui.click(x=1329, y=1000)
     for move in pgn_dict["Moves"]:
         mark = is_on_screen_multiprocessed(
@@ -314,7 +321,7 @@ def parse_review():
                           is_mate))
 
     white_rating = pyautogui.locateCenterOnScreen(
-        png_dir+'white_rating.png', confidence=0.6, region=(1215, 130, 500, 830))
+        png_dir+'white_rating.png', confidence=0.9, region=(1215, 130, 500, 830))
     pyautogui.moveTo(white_rating)
     pyautogui.moveRel(0, -10)
     pyautogui.doubleClick()
@@ -325,7 +332,7 @@ def parse_review():
     win32clipboard.CloseClipboard()
 
     black_rating = pyautogui.locateCenterOnScreen(
-        png_dir+'black_rating.png', confidence=0.6, region=(1215, 130, 500, 830))
+        png_dir+'black_rating.png', confidence=0.9, region=(1215, 130, 500, 830))
     pyautogui.moveTo(black_rating)
     pyautogui.moveRel(0, -10)
     pyautogui.doubleClick()
@@ -390,6 +397,83 @@ def parse_review():
     return game
 
 
+def parse_archive_page():
+    pyautogui.scroll(-250)
+    x = 945
+    y_list = [115+i*75 for i in range(13)]
+    analysis_fail = []
+    for y in y_list:
+        pyautogui.click(x, y)
+        time.sleep(0.01)
+        while not is_on_screen('analysis_loaded.png', confidence=0.6):
+            analysis_fail.append(click_button('analysis.png'))
+        game = parse_review()
+        game.save()
+        pyautogui.click(20, 55)
+        pyautogui.moveTo(x, y)
+        while not is_on_screen('refreshicon.png', confidence=0.9):
+            if True in analysis_fail:
+                pyautogui.click(20, 55)
+                pyautogui.moveTo(x, y)
+            analysis_fail = []
+    pyautogui.scroll(-1175)
+    for y in y_list:
+        pyautogui.click(x, y)
+        time.sleep(0.01)
+        while not is_on_screen('analysis_loaded.png', confidence=0.6):
+            click_button('analysis.png')
+        game = parse_review()
+        game.save()
+        pyautogui.click(20, 55)
+        pyautogui.moveTo(x, y)
+        while not is_on_screen('refreshicon.png', confidence=0.9):
+            if True in analysis_fail:
+                pyautogui.click(20, 55)
+                pyautogui.moveTo(x, y)
+            analysis_fail = []
+    pyautogui.scroll(-1175)
+    for y in y_list:
+        pyautogui.click(x, y)
+        time.sleep(0.01)
+        while not is_on_screen('analysis_loaded.png', confidence=0.6):
+            click_button('analysis.png')
+        game = parse_review()
+        game.save()
+        pyautogui.click(20, 55)
+        pyautogui.moveTo(x, y)
+        while not is_on_screen('refreshicon.png', confidence=0.9):
+            if True in analysis_fail:
+                pyautogui.click(20, 55)
+                pyautogui.moveTo(x, y)
+            analysis_fail = []
+    pyautogui.scroll(-1175)
+    for y in y_list[0:11]:
+        pyautogui.click(x, y)
+        time.sleep(0.01)
+        while not is_on_screen('analysis_loaded.png', confidence=0.6):
+            click_button('analysis.png')
+        game = parse_review()
+        game.save()
+        pyautogui.click(20, 55)
+        while not is_on_screen('refreshicon.png', confidence=0.9):
+            if True in analysis_fail:
+                pyautogui.click(20, 55)
+                pyautogui.moveTo(x, y)
+            analysis_fail = []
+
+
+def parse_n_pages(n):
+    for i in range(n):
+        parse_archive_page()
+        time.sleep(0.1)
+        print(f'Parsed page {i+1}')
+        click_button('arrow.png')
+        while not is_on_screen('refreshicon.png', confidence=0.9):
+            pass
+
+
 if __name__ == "__main__":
     time.sleep(5)
-    game = parse_review()
+    parse_n_pages(10)
+    # game = parse_review()
+    pass
