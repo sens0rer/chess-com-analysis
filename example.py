@@ -8,7 +8,7 @@ class SettingsNotSet(Exception):
 
 if __name__ == "__main__":
     # Set these variables
-    # You have to have chess.com membership for tis to work
+    # You have to have chess.com membership for this to work
     username = ''
     cookie = {}
     cookie['PHPSESSID'] = ''
