@@ -1,5 +1,7 @@
 import analysisscraper as scraper
-import json
+# Install nest_asyncio and uncomment this if you're having asyncio exceptions thrown
+# import nest_asyncio
+# nest_asyncio.apply()
 
 class SettingsNotSet(Exception):
     pass
