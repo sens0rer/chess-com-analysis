@@ -10,8 +10,9 @@ if __name__ == "__main__":
     # Set these variables
     # You have to have chess.com membership for tis to work
     username = ''
-    cookie = {'PHPSESSID': '',
-              'CHESSCOM_REMEMBERME': ''}
+    cookie = {}
+    cookie['PHPSESSID'] = ''
+    cookie['CHESSCOM_REMEMBERME'] = ''
     
     
     if not (username and cookie['PHPSESSID'] and cookie['PHPSESSID']):
